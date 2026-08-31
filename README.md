@@ -51,7 +51,7 @@ https://github.com/maciuchx/hive-chat-sdk-swift
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.7.0")
+    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.8.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -200,30 +200,21 @@ Hive adds tomorrow — your users may be several releases behind.
 
 ### Push notifications
 
-Two lines, and Hive sends them — no backend of yours involved.
+Hive does not send push itself, by design — an app that already has push would
+end up with two systems notifying one phone, with duplicate alerts, badge
+counts that disagree and your own notification preferences bypassed.
 
-```swift
-func application(_ app: UIApplication,
-                 didRegisterForRemoteNotificationsWithDeviceToken token: Data) {
-    chat.registerDeviceToken(token)   // the raw Data, no hex conversion needed
-}
+Instead Hive tells **your** backend when a reply could not be delivered, and
+your backend sends the notification with the credentials it already has. Two
+ways, both in **Settings → Live Chat → Mobile Push**:
 
-// On sign-out, so the next person on this phone is not notified
-chat.unregisterDeviceToken(hexToken)
-```
-
-Your team pastes the app's APNs key into **Settings → Live Chat → Mobile Push**
-once, and Hive notifies the customer whenever a reply lands while the app is
-closed. Apple will not let anyone send to your app without that key, so pasting
-it is the floor — but it is the whole of it: no endpoint of yours to expose, no
-polling loop, and nothing to configure on your domain.
-
-Registration is keyed on the device's visitor token rather than an email, so it
-works for a customer who has never signed in.
-
-If you would rather Hive never held your signing key, the same events are
-available as a webhook to your backend or as a feed you poll — both in the same
-settings panel.
+- **Collect the events** (recommended) — your backend polls Hive. An outbound
+  request, so nothing in your firewall objects to it: no endpoint to expose, no
+  allowlist, no DNS record.
+- **Receive a webhook** — Hive POSTs to an endpoint of yours the moment a reply
+  lands. Faster, if your edge admits it. Note that Cloudflare's free-tier Bot
+  Fight Mode challenges server-to-server requests and cannot be exempted by any
+  rule, so plenty of hosts cannot use this route.
 
 ### Notifying the customer
 

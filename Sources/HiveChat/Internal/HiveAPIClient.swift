@@ -81,36 +81,6 @@ struct HiveAPIClient: Sendable {
         _ = try await perform(request)
     }
 
-    // MARK: - Push devices
-
-    /// Registers this device so Hive can wake it when a reply lands while the
-    /// app is closed. Keyed on the visitor token rather than an email, so it
-    /// works for a customer who never signed in.
-    func registerPushDevice(visitorToken: String, deviceToken: String) async throws {
-        var request = URLRequest(url: base.appendingPathComponent("widget-push-device"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "widget_key": widgetKey,
-            "visitor_token": visitorToken,
-            "device_token": deviceToken,
-            "platform": "ios",
-        ])
-        _ = try await perform(request)
-    }
-
-    /// Stops pushes to this device — sent when a customer signs out.
-    func unregisterPushDevice(deviceToken: String) async throws {
-        var request = URLRequest(url: base.appendingPathComponent("widget-push-device"))
-        request.httpMethod = "DELETE"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "widget_key": widgetKey,
-            "device_token": deviceToken,
-        ])
-        _ = try await perform(request)
-    }
-
     // MARK: - Uploads
 
     /// Uploads a file and returns the payload the caller should then send as

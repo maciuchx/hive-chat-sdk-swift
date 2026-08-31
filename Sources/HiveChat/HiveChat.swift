@@ -447,41 +447,31 @@ public final class HiveChat: ObservableObject {
         ])
     }
 
-    /// Registers this device's APNs token so Hive can notify the customer when
-    /// a reply arrives and the app is closed.
+    /// No longer supported. Hive does not send push notifications itself.
     ///
-    /// Call it from `didRegisterForRemoteNotificationsWithDeviceToken` — the
-    /// `Data` Apple hands you goes straight in, no hex conversion needed.
-    /// Registration is tied to this device's visitor token, so it works for a
-    /// customer who has never signed in, and it needs nothing of your backend:
-    /// Hive sends the notification itself using the credentials your team
-    /// pasted into Settings → Live Chat → Mobile Push.
+    /// It briefly could, using credentials a merchant pasted into the
+    /// dashboard — removed because an app that already has push ends up with
+    /// two systems notifying the same phone, with duplicate alerts, badge
+    /// counts that disagree and the app's own notification preferences
+    /// bypassed. Storing other people's signing keys was also a poor thing to
+    /// carry for a feature so easily done better by the app itself.
     ///
-    /// Safe to call before a conversation exists.
+    /// Notify from your own backend instead: Hive tells it when a reply could
+    /// not be delivered, either by webhook or by a feed you poll. Both are in
+    /// Settings → Live Chat → Mobile Push.
+    @available(*, deprecated, message: "Hive no longer sends push itself — notify from your own backend using the push webhook.")
     public func registerDeviceToken(_ deviceToken: Data) {
-        registerDeviceToken(deviceToken.map { String(format: "%02x", $0) }.joined())
+        log("registerDeviceToken is no longer supported — see Settings → Live Chat → Mobile Push")
     }
 
-    /// Registers an already hex-encoded APNs token.
+    @available(*, deprecated, message: "Hive no longer sends push itself — notify from your own backend using the push webhook.")
     public func registerDeviceToken(_ hexToken: String) {
-        guard !hexToken.isEmpty else { return }
-        let token = visitorToken
-        Task { @MainActor [weak self] in
-            do {
-                try await self?.api.registerPushDevice(visitorToken: token, deviceToken: hexToken)
-            } catch {
-                self?.log("device registration failed: \(error)")
-            }
-        }
+        log("registerDeviceToken is no longer supported — see Settings → Live Chat → Mobile Push")
     }
 
-    /// Stops pushes to this device. Call on sign-out, so the next person using
-    /// the phone is not notified about a conversation that was never theirs.
+    @available(*, deprecated, message: "Hive no longer sends push itself — notify from your own backend using the push webhook.")
     public func unregisterDeviceToken(_ hexToken: String) {
-        guard !hexToken.isEmpty else { return }
-        Task { [weak self] in
-            try? await self?.api.unregisterPushDevice(deviceToken: hexToken)
-        }
+        log("unregisterDeviceToken is no longer supported — see Settings → Live Chat → Mobile Push")
     }
 
     /// Gives the customer's email to the team mid-conversation — what the

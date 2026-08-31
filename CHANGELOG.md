@@ -6,6 +6,16 @@ semantic versioning from 1.0 onwards.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-31
+
+### Deprecated
+- `registerDeviceToken(_:)` / `unregisterDeviceToken(_:)` now do nothing but
+  log. Hive no longer sends push notifications itself: an app that already has
+  push ends up with two systems notifying one phone, and holding merchants'
+  signing keys was a liability not worth carrying. Notify from your own backend
+  instead — Hive tells it when a reply could not be delivered, by webhook or by
+  a feed you poll.
+
 ## [0.7.0] — 2026-08-31
 
 ### Added
