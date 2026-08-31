@@ -7,7 +7,7 @@ import XCTest
 /// and CI has none:
 ///
 /// ```sh
-/// HIVE_WIDGET_KEY=wk_live_… swift test --filter LiveIntegrationTests
+/// HIVE_WIDGET_KEY=hv_a1b2c3d4e5f6a1b2c3d4e5f6 swift test --filter LiveIntegrationTests
 /// ```
 ///
 /// `testSocketHandshake` connects as a visitor. That is not free of side

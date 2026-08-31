@@ -5,7 +5,7 @@ your customers to the same inbox, bot and agents as the web chat widget on
 your storefront — no WebView.
 
 ```swift
-let chat = HiveChat(configuration: .init(widgetKey: "wk_live_…"))
+let chat = HiveChat(configuration: .init(widgetKey: "hv_a1b2c3d4e5f6a1b2c3d4e5f6"))
 chat.identify(name: "Alex Doe", email: "alex@example.com")
 
 NavigationLink("Chat with us") {
@@ -61,8 +61,10 @@ targets: [
 
 ## Getting your widget key
 
-Hive dashboard → **Settings → Live Chat → your widget**. It looks like
-`wk_live_…`.
+Hive dashboard → **Settings → Live Chat → your widget**, or the **Mobile app →
+Native SDK** panel on that widget, which shows the key next to ready-made
+snippets. Keys are `hv_` followed by 24 hex characters, e.g.
+`hv_a1b2c3d4e5f6a1b2c3d4e5f6`.
 
 It is safe to ship in your app binary. The same key is already public in the
 HTML of every storefront running the web widget, and it grants exactly one
@@ -80,7 +82,7 @@ struct MyApp: App {
        every time the screen appears drops the socket, loses the unread count
        and starts a new thread each time. */
     @StateObject private var chat = HiveChat(configuration: .init(
-        widgetKey: "wk_live_…"
+        widgetKey: "hv_a1b2c3d4e5f6a1b2c3d4e5f6"
     ))
 
     var body: some Scene {
@@ -243,7 +245,7 @@ Stated plainly, because finding out later is worse:
 ## Verifying against a real server
 
 ```sh
-HIVE_WIDGET_KEY=wk_live_… swift test --filter LiveIntegrationTests
+HIVE_WIDGET_KEY=hv_a1b2c3d4e5f6a1b2c3d4e5f6 swift test --filter LiveIntegrationTests
 ```
 
 Loads the widget settings and performs a real socket handshake. It creates no

@@ -7,7 +7,7 @@ import UIKit
 /// support team.
 ///
 /// ```swift
-/// let chat = HiveChat(configuration: .init(widgetKey: "wk_live_…"))
+/// let chat = HiveChat(configuration: .init(widgetKey: "hv_a1b2c3d4e5f6a1b2c3d4e5f6"))
 /// chat.identify(name: customer.name, email: customer.email)
 /// await chat.start()
 /// chat.send("Where is my order?")
