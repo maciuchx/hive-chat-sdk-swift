@@ -688,6 +688,7 @@ public final class HiveChat: ObservableObject {
             } else {
                 unreadCount += 1
             }
+            onMessageReceived?(message)
         }
     }
 
@@ -717,6 +718,23 @@ public final class HiveChat: ObservableObject {
     }
 
     // MARK: - Callbacks
+
+    /// Called when a message arrives from the team while the app is running.
+    ///
+    /// This is the half of notifications that needs no server: the app is
+    /// awake, the socket is connected, and you already have the message — so
+    /// raise an in-app banner, or post a `UNNotificationRequest` if the chat
+    /// screen is not the one on top.
+    ///
+    /// Only fires for live arrivals from the team, never for the customer's
+    /// own messages and never for the thread replayed on reconnect — someone
+    /// returning to the app should not be notified about messages they have
+    /// already read.
+    ///
+    /// It cannot help while the app is closed. A suspended app runs no code,
+    /// so nothing local can notice a message or raise anything; only a push
+    /// sent by a server can wake it. That is what the push webhook is for.
+    public var onMessageReceived: ((ChatMessage) -> Void)?
 
     /// Called when an agent proactively invites the customer into a chat.
     /// Open your chat screen from here.

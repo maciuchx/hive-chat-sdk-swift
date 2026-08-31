@@ -6,6 +6,14 @@ semantic versioning from 1.0 onwards.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-08-31
+
+### Added
+- `onMessageReceived` — fires when a message arrives from the team while your
+  app is running, so you can raise an in-app banner or a local notification
+  without any server involvement. Only live arrivals from the team: never the
+  customer's own messages, and never the thread replayed on reconnect.
+
 ## [0.5.0] — 2026-08-31
 
 ### Fixed

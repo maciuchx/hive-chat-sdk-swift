@@ -51,7 +51,7 @@ https://github.com/maciuchx/hive-chat-sdk-swift
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.5.0")
+    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.6.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -197,6 +197,34 @@ case .unsupported:               EmptyView()   // sentinel from a newer server
 Always handle `.unsupported` by rendering nothing rather than crashing or
 showing raw text. It exists so an app shipped today survives a content type
 Hive adds tomorrow — your users may be several releases behind.
+
+### Notifying the customer
+
+Two halves, and only one of them needs a server.
+
+**While your app is running**, the socket is connected and the SDK already has
+the message — no server involved:
+
+```swift
+chat.onMessageReceived = { message in
+    guard !chatScreenIsVisible else { return }
+    let content = UNMutableNotificationContent()
+    content.title = message.senderName ?? "Customer service"
+    content.body = message.content.previewText
+    UNUserNotificationCenter.current().add(
+        UNNotificationRequest(identifier: message.id, content: content, trigger: nil)
+    )
+}
+```
+
+**While your app is closed**, nothing local can help. A suspended app runs no
+code, so it cannot notice a message, and it cannot raise a notification about
+one it never saw. Only a push sent by a server can wake it — which is what
+Hive's push webhook exists for: it tells your backend a reply went undelivered,
+and your backend sends the push with the APNs credentials it already has.
+
+Having APNs set up in your app is what lets it *receive* a push. Something
+still has to *send* one.
 
 ### Giving agents the context they have on the web
 
