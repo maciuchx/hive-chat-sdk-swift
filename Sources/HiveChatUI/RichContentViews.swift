@@ -5,12 +5,21 @@ import HiveChat
 
 struct ProductCardView: View {
     let card: ProductCard
+    var onTap: ((ProductCard) -> Void)?
+    var onOpenURL: ((URL) -> Bool)?
     @Environment(\.hiveChatTheme) private var theme
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         Button {
-            if let url = card.buyURL { openURL(url) }
+            /* The host app gets first refusal: if it handles products itself
+               the customer never leaves the app, which is the whole point of
+               a native chat. */
+            if let onTap {
+                onTap(card)
+            } else if let url = card.buyURL, onOpenURL?(url) != true {
+                openURL(url)
+            }
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 if let imageURL = card.imageURL {
@@ -55,7 +64,7 @@ struct ProductCardView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: theme.cornerRadius))
         .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens the product page")
+        .accessibilityHint(onTap == nil ? "Opens the product page" : "Opens the product")
     }
 }
 

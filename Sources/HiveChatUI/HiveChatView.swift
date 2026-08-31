@@ -21,13 +21,31 @@ public struct HiveChatView: View {
     @State private var errorMessage: String?
     @FocusState private var isComposerFocused: Bool
 
+    private let onProductTap: ((ProductCard) -> Void)?
+    private let onOpenURL: ((URL) -> Bool)?
+
     /// - Parameters:
     ///   - chat: The conversation to show. Owned by you, so it survives the
     ///     view being dismissed and rebuilt — messages that arrive while the
     ///     screen is closed still land in the thread.
     ///   - theme: Overrides the merchant's branding entirely.
-    public init(chat: HiveChat, theme: HiveChatTheme? = nil) {
+    ///   - onProductTap: Called when the customer taps a product the bot or an
+    ///     agent sent. Without it the card opens its `buyURL` in a browser,
+    ///     which walks the customer out of your app mid-conversation. Handle it
+    ///     to push your own product screen instead — the card carries the
+    ///     title, image, price and URL, and a product id or handle can be
+    ///     recovered from ``ProductCard/buyURL``.
+    ///   - onOpenURL: Called before any link is opened externally. Return
+    ///     `true` if you handled it; `false` to let the SDK open a browser.
+    public init(
+        chat: HiveChat,
+        theme: HiveChatTheme? = nil,
+        onProductTap: ((ProductCard) -> Void)? = nil,
+        onOpenURL: ((URL) -> Bool)? = nil
+    ) {
         self.chat = chat
+        self.onProductTap = onProductTap
+        self.onOpenURL = onOpenURL
         _explicitTheme = State(initialValue: theme)
     }
 
@@ -121,7 +139,9 @@ public struct HiveChatView: View {
                             previews: [],
                             onReact: { _ in },
                             onOpenArticle: { _ in },
-                            onSubmitForm: { _, _ in }
+                            onSubmitForm: { _, _ in },
+                            onProductTap: onProductTap,
+                            onOpenURL: onOpenURL
                         )
                     }
 
@@ -131,7 +151,9 @@ public struct HiveChatView: View {
                             previews: chat.linkPreviews[message.id] ?? [],
                             onReact: { chat.toggleReaction($0, on: message.id) },
                             onOpenArticle: openArticle,
-                            onSubmitForm: { form, values in chat.submit(form: form, values: values) }
+                            onSubmitForm: { form, values in chat.submit(form: form, values: values) },
+                            onProductTap: onProductTap,
+                            onOpenURL: onOpenURL
                         )
                         .id(message.id)
                     }

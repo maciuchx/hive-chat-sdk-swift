@@ -6,6 +6,16 @@ semantic versioning from 1.0 onwards.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-31
+
+### Added
+- `HiveChatView(onProductTap:)` — handle a product-card tap yourself and push
+  your own native product screen. Without it the card opened its `buyURL` in a
+  browser, walking the customer out of the conversation they were having,
+  which rather defeats a native chat.
+- `HiveChatView(onOpenURL:)` — first refusal on every link in the thread.
+  Return `true` when you have handled it, `false` to let a browser open it.
+
 ## [0.2.0] — 2026-08-31
 
 ### Fixed

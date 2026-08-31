@@ -51,7 +51,7 @@ https://github.com/maciuchx/hive-chat-sdk-swift
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.2.0")
+    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.3.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -197,6 +197,31 @@ case .unsupported:               EmptyView()   // sentinel from a newer server
 Always handle `.unsupported` by rendering nothing rather than crashing or
 showing raw text. It exists so an app shipped today survives a content type
 Hive adds tomorrow — your users may be several releases behind.
+
+### Keeping the customer inside your app
+
+The bot and your agents can send **product cards** — the same ones the website
+chat sends. By default tapping one opens its `buyURL` in a browser, which
+walks the customer out of the conversation. Handle it yourself instead:
+
+```swift
+HiveChatView(chat: chat) { product in
+    // The card carries title, imageURL, price and buyURL. Recover your own
+    // product id or handle from buyURL and push your native screen.
+    guard let handle = product.buyURL?.lastPathComponent else { return }
+    router.push(.product(handle: handle))
+}
+```
+
+The same applies to any other link in the thread:
+
+```swift
+HiveChatView(chat: chat, onProductTap: { … }, onOpenURL: { url in
+    guard let route = deepLinkRouter.route(for: url) else { return false } // false → open a browser
+    router.push(route)
+    return true
+})
+```
 
 ### Theming
 

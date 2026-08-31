@@ -8,6 +8,8 @@ struct MessageRow: View {
     let onReact: (String) -> Void
     let onOpenArticle: (ArticleCard) -> Void
     let onSubmitForm: (ChatForm, [String: String]) -> Void
+    var onProductTap: ((ProductCard) -> Void)?
+    var onOpenURL: ((URL) -> Bool)?
 
     @Environment(\.hiveChatTheme) private var theme
 
@@ -18,7 +20,9 @@ struct MessageRow: View {
         case .attachment(let attachment):
             bubble(padded: false) { AttachmentContent(attachment: attachment) }
         case .productCard(let card):
-            CardContainer(alignment: .leading) { ProductCardView(card: card) }
+            CardContainer(alignment: .leading) {
+                ProductCardView(card: card, onTap: onProductTap, onOpenURL: onOpenURL)
+            }
         case .articleCard(let card):
             CardContainer(alignment: .leading) {
                 ArticleCardView(card: card) { onOpenArticle(card) }
