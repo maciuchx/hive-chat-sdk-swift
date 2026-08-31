@@ -51,7 +51,7 @@ https://github.com/maciuchx/hive-chat-sdk-swift
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.6.0")
+    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.7.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -197,6 +197,33 @@ case .unsupported:               EmptyView()   // sentinel from a newer server
 Always handle `.unsupported` by rendering nothing rather than crashing or
 showing raw text. It exists so an app shipped today survives a content type
 Hive adds tomorrow — your users may be several releases behind.
+
+### Push notifications
+
+Two lines, and Hive sends them — no backend of yours involved.
+
+```swift
+func application(_ app: UIApplication,
+                 didRegisterForRemoteNotificationsWithDeviceToken token: Data) {
+    chat.registerDeviceToken(token)   // the raw Data, no hex conversion needed
+}
+
+// On sign-out, so the next person on this phone is not notified
+chat.unregisterDeviceToken(hexToken)
+```
+
+Your team pastes the app's APNs key into **Settings → Live Chat → Mobile Push**
+once, and Hive notifies the customer whenever a reply lands while the app is
+closed. Apple will not let anyone send to your app without that key, so pasting
+it is the floor — but it is the whole of it: no endpoint of yours to expose, no
+polling loop, and nothing to configure on your domain.
+
+Registration is keyed on the device's visitor token rather than an email, so it
+works for a customer who has never signed in.
+
+If you would rather Hive never held your signing key, the same events are
+available as a webhook to your backend or as a feed you poll — both in the same
+settings panel.
 
 ### Notifying the customer
 

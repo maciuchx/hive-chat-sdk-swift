@@ -447,6 +447,43 @@ public final class HiveChat: ObservableObject {
         ])
     }
 
+    /// Registers this device's APNs token so Hive can notify the customer when
+    /// a reply arrives and the app is closed.
+    ///
+    /// Call it from `didRegisterForRemoteNotificationsWithDeviceToken` — the
+    /// `Data` Apple hands you goes straight in, no hex conversion needed.
+    /// Registration is tied to this device's visitor token, so it works for a
+    /// customer who has never signed in, and it needs nothing of your backend:
+    /// Hive sends the notification itself using the credentials your team
+    /// pasted into Settings → Live Chat → Mobile Push.
+    ///
+    /// Safe to call before a conversation exists.
+    public func registerDeviceToken(_ deviceToken: Data) {
+        registerDeviceToken(deviceToken.map { String(format: "%02x", $0) }.joined())
+    }
+
+    /// Registers an already hex-encoded APNs token.
+    public func registerDeviceToken(_ hexToken: String) {
+        guard !hexToken.isEmpty else { return }
+        let token = visitorToken
+        Task { @MainActor [weak self] in
+            do {
+                try await self?.api.registerPushDevice(visitorToken: token, deviceToken: hexToken)
+            } catch {
+                self?.log("device registration failed: \(error)")
+            }
+        }
+    }
+
+    /// Stops pushes to this device. Call on sign-out, so the next person using
+    /// the phone is not notified about a conversation that was never theirs.
+    public func unregisterDeviceToken(_ hexToken: String) {
+        guard !hexToken.isEmpty else { return }
+        Task { [weak self] in
+            try? await self?.api.unregisterPushDevice(deviceToken: hexToken)
+        }
+    }
+
     /// Gives the customer's email to the team mid-conversation — what the
     /// offline form collects.
     public func provideEmail(_ email: String) {
