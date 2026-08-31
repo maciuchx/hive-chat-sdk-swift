@@ -51,7 +51,7 @@ https://github.com/maciuchx/hive-chat-sdk-swift
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.3.0")
+    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.4.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -197,6 +197,47 @@ case .unsupported:               EmptyView()   // sentinel from a newer server
 Always handle `.unsupported` by rendering nothing rather than crashing or
 showing raw text. It exists so an app shipped today survives a content type
 Hive adds tomorrow — your users may be several releases behind.
+
+### Giving agents the context they have on the web
+
+On your website an agent sees which page a customer is on and what is in their
+basket. An app has no URL, so tell Hive yourself — then the agent panel shows
+the same thing for app customers.
+
+```swift
+// On navigation
+chat.trackScreen("Product", title: "Slim Fit Suit", reference: "slim-fit-suit")
+chat.trackScreen("Basket")
+
+// Whenever the basket changes
+chat.updateCart(
+    items: basket.lines.map {
+        CartItem(title: $0.name, quantity: $0.qty, price: $0.price, variant: $0.size)
+    },
+    total: basket.total,
+    currency: "GBP"
+)
+```
+
+Both are safe to call before a conversation exists — they are recorded against
+the visitor, so an agent picking the chat up sees what the customer was doing
+beforehand. Without these calls, the agent's browsing history shows only
+"iOS app", which is true but not useful.
+
+### Voice messages
+
+Off by default, because recording needs a microphone prompt and an
+`NSMicrophoneUsageDescription` in your Info.plist — neither of which an SDK
+should impose on you.
+
+```swift
+HiveChatView(chat: chat, voiceMessagesEnabled: true)
+```
+
+The mic appears when the message field is empty. Recordings go out as AAC in
+MP4, which agents can play in the dashboard and which survives a hand-off to
+WhatsApp. The permission prompt appears when the customer taps the mic, not at
+launch.
 
 ### Keeping the customer inside your app
 

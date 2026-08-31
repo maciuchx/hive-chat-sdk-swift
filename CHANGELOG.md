@@ -6,6 +6,23 @@ semantic versioning from 1.0 onwards.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-31
+
+### Fixed
+- **Opening the chat no longer says "Connecting…".** `connect()` reconnected
+  unconditionally, so appearing on the chat screen tore down a perfectly
+  healthy socket and re-handshook it. It now leaves a live connection alone.
+
+### Added
+- `trackScreen(_:title:reference:)` and `updateCart(items:total:currency:)` —
+  give agents the browsing context and basket they already see for website
+  customers. Without them the agent panel shows only "iOS app".
+- **Attach a photo or file** from the composer — a photo picker and a file
+  importer, offered separately because they are not the same experience.
+- **Voice messages**, opt-in via `voiceMessagesEnabled` (needs
+  `NSMicrophoneUsageDescription`). AAC-in-MP4, which the dashboard plays and
+  WhatsApp accepts.
+
 ## [0.3.0] — 2026-08-31
 
 ### Added

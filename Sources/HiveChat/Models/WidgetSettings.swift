@@ -85,3 +85,28 @@ public struct KnowledgeBaseArticle: Equatable, Sendable, Identifiable {
         bodyHTML = json["html"] as? String
     }
 }
+
+/// One line in the customer's basket, mirrored to the agent panel by
+/// ``HiveChat/updateCart(items:total:currency:)``.
+public struct CartItem: Equatable, Sendable {
+    public let title: String
+    public let quantity: Int
+    /// Formatted as you would show it, e.g. `"129.99"`.
+    public let price: String
+    public let variant: String?
+    public let imageURL: URL?
+
+    public init(
+        title: String,
+        quantity: Int,
+        price: String,
+        variant: String? = nil,
+        imageURL: URL? = nil
+    ) {
+        self.title = title
+        self.quantity = quantity
+        self.price = price
+        self.variant = variant
+        self.imageURL = imageURL
+    }
+}

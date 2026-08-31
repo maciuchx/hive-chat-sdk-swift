@@ -38,3 +38,14 @@ public enum HivePalette {
         #endif
     }
 }
+
+import UniformTypeIdentifiers
+
+extension URL {
+    /// Best-effort MIME type from the file extension. The server falls back to
+    /// treating anything unrecognised as a generic file, so a wrong guess
+    /// costs an icon, not a delivery.
+    var mimeType: String {
+        UTType(filenameExtension: pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+    }
+}

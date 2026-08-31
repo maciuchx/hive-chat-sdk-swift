@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 import HiveChat
 
 /// A complete chat screen, ready to push or present.
@@ -21,8 +23,12 @@ public struct HiveChatView: View {
     @State private var errorMessage: String?
     @FocusState private var isComposerFocused: Bool
 
+    private let voiceMessagesEnabled: Bool
     private let onProductTap: ((ProductCard) -> Void)?
     private let onOpenURL: ((URL) -> Bool)?
+    @StateObject private var recorder = VoiceRecorder()
+    @State private var photoItem: PhotosPickerItem?
+    @State private var isShowingFileImporter = false
 
     /// - Parameters:
     ///   - chat: The conversation to show. Owned by you, so it survives the
@@ -37,13 +43,20 @@ public struct HiveChatView: View {
     ///     recovered from ``ProductCard/buyURL``.
     ///   - onOpenURL: Called before any link is opened externally. Return
     ///     `true` if you handled it; `false` to let the SDK open a browser.
+    ///   - voiceMessagesEnabled: Whether the customer can send a voice note.
+    ///     Off by default, and deliberately: recording needs a microphone
+    ///     prompt and an `NSMicrophoneUsageDescription` in your Info.plist, and
+    ///     an SDK should not impose either. The prompt appears when the
+    ///     customer taps the mic, not at launch.
     public init(
         chat: HiveChat,
         theme: HiveChatTheme? = nil,
+        voiceMessagesEnabled: Bool = false,
         onProductTap: ((ProductCard) -> Void)? = nil,
         onOpenURL: ((URL) -> Bool)? = nil
     ) {
         self.chat = chat
+        self.voiceMessagesEnabled = voiceMessagesEnabled
         self.onProductTap = onProductTap
         self.onOpenURL = onOpenURL
         _explicitTheme = State(initialValue: theme)
@@ -65,6 +78,41 @@ public struct HiveChatView: View {
         .sheet(item: $article) { article in
             ArticleReaderView(article: article)
                 .hiveChatTheme(theme)
+        }
+        .onChange(of: photoItem) {
+            guard let photoItem else { return }
+            Task {
+                defer { self.photoItem = nil }
+                do {
+                    guard let data = try await photoItem.loadTransferable(type: Data.self) else { return }
+                    /* PhotosPicker hands back the asset's data without naming
+                       it; the extension only has to be honest enough for the
+                       server to pick a Content-Type. */
+                    try await chat.send(fileData: data, filename: "photo.jpg", contentType: "image/jpeg")
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+        .fileImporter(isPresented: $isShowingFileImporter, allowedContentTypes: [.item]) { result in
+            guard case .success(let url) = result else { return }
+            Task {
+                /* A file outside the app's container needs the security scope
+                   opened before it can be read, and closed after — skipping
+                   this reads zero bytes from anything in Files. */
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    let data = try Data(contentsOf: url)
+                    try await chat.send(
+                        fileData: data,
+                        filename: url.lastPathComponent,
+                        contentType: url.mimeType
+                    )
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
         }
         .alert("Couldn't send", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
@@ -203,9 +251,32 @@ public struct HiveChatView: View {
                 draft: $draft,
                 placeholder: chat.widgetSettings?.placeholderText ?? "Type your message…",
                 isFocused: _isComposerFocused,
+                voiceMessagesEnabled: voiceMessagesEnabled,
+                recorder: recorder,
+                photoItem: $photoItem,
+                onPickFile: { isShowingFileImporter = true },
+                onSendRecording: sendRecording,
                 onSend: send,
                 onTypingChanged: { chat.setTyping($0) }
             )
+        }
+    }
+
+    private func sendRecording() {
+        guard let recording = recorder.stopAndTake() else {
+            errorMessage = "That recording was too short."
+            return
+        }
+        Task {
+            do {
+                try await chat.send(
+                    fileData: recording.data,
+                    filename: recording.filename,
+                    contentType: "audio/mp4"
+                )
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -233,13 +304,85 @@ struct Composer: View {
     @Binding var draft: String
     let placeholder: String
     @FocusState var isFocused: Bool
+    let voiceMessagesEnabled: Bool
+    @ObservedObject var recorder: VoiceRecorder
+    @Binding var photoItem: PhotosPickerItem?
+    let onPickFile: () -> Void
+    let onSendRecording: () -> Void
     let onSend: () -> Void
     let onTypingChanged: (Bool) -> Void
 
     @Environment(\.hiveChatTheme) private var theme
 
     var body: some View {
+        if recorder.isRecording {
+            recordingBar
+        } else {
+            composingBar
+        }
+    }
+
+    /* While recording, the row becomes the recording — a text field nobody can
+       type into and a send button that would send an empty message are just
+       clutter at that moment. */
+    private var recordingBar: some View {
+        HStack(spacing: 8) {
+            Button { recorder.cancel() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.red)
+                    .frame(width: 34, height: 34)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel recording")
+
+            HStack(spacing: 8) {
+                Circle().fill(Color.red).frame(width: 9, height: 9)
+                Text(String(format: "Recording  %d:%02d", recorder.elapsedSeconds / 60, recorder.elapsedSeconds % 60))
+                    .font(.subheadline)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(HivePalette.secondaryBackground)
+            .clipShape(Capsule())
+
+            Button(action: onSendRecording) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(theme.onBrandColor)
+                    .frame(width: 34, height: 34)
+                    .background(theme.brandFill)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Send voice message")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(theme.background)
+    }
+
+    private var composingBar: some View {
         HStack(alignment: .bottom, spacing: 8) {
+            Menu {
+                /* Two entries, because they are not the same experience: the
+                   photo picker shows the camera roll without a permission
+                   prompt, while a PDF receipt or returns label lives in Files. */
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Label("Photo", systemImage: "photo")
+                }
+                Button { onPickFile() } label: {
+                    Label("File", systemImage: "doc")
+                }
+            } label: {
+                Image(systemName: "paperclip")
+                    .font(.system(size: 17))
+                    .foregroundColor(theme.secondaryText)
+                    .frame(width: 34, height: 34)
+            }
+            .accessibilityLabel("Attach a photo or file")
+
             TextField(placeholder, text: $draft, axis: .vertical)
                 .lineLimit(1...5)
                 .focused($isFocused)
@@ -252,18 +395,31 @@ struct Composer: View {
                 }
                 .onSubmit(send)
 
-            Button(action: send) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(theme.onBrandColor)
-                    .frame(width: 34, height: 34)
-                    .background(theme.brandFill)
-                    .clipShape(Circle())
+            if voiceMessagesEnabled && trimmed.isEmpty {
+                Button {
+                    Task { try? await recorder.start() }
+                } label: {
+                    Image(systemName: "mic")
+                        .font(.system(size: 17))
+                        .foregroundColor(theme.secondaryText)
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Record a voice message")
+            } else {
+                Button(action: send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(theme.onBrandColor)
+                        .frame(width: 34, height: 34)
+                        .background(theme.brandFill)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(trimmed.isEmpty)
+                .opacity(trimmed.isEmpty ? 0.4 : 1)
+                .accessibilityLabel("Send message")
             }
-            .buttonStyle(.plain)
-            .disabled(trimmed.isEmpty)
-            .opacity(trimmed.isEmpty ? 0.4 : 1)
-            .accessibilityLabel("Send message")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
