@@ -26,11 +26,13 @@ NavigationLink("Chat with us") {
 
 | | |
 |---|---|
-| iOS | 16.0+ |
+| iOS | 17.0+ |
 | macOS | 14.0+ |
 | visionOS | 1.0+ |
 | Swift | 5.9+ |
 | Xcode | 15+ |
+
+The `HiveChat` core target has no SwiftUI dependency, and nothing in it needs iOS 17 — an app on an older floor can take it alone. `0.1.x` supported iOS 16 throughout.
 
 The `HiveChat` core target has no SwiftUI dependency. `HiveChatUI` is where
 the views live, and it is a separate product you can leave out.
@@ -49,7 +51,7 @@ https://github.com/maciuchx/hive-chat-sdk-swift
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.1.0")
+    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.2.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [

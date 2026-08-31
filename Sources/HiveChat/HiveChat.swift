@@ -94,7 +94,14 @@ public final class HiveChat: ObservableObject {
     private var typingResetTask: Task<Void, Never>?
     private var lifecycleObservers: [NSObjectProtocol] = []
 
-    public init(configuration: HiveChatConfiguration) {
+    /// Creates a chat client.
+    ///
+    /// Deliberately `nonisolated`: the rest of the type is main-actor bound
+    /// because a view binds to its state, but *construction* touches nothing
+    /// shared, and requiring the main actor here made the natural places to
+    /// build one — a `ViewModel.init`, an `App` struct's property
+    /// initialiser, an `AppDelegate` — fail to compile under Swift 6.
+    public nonisolated init(configuration: HiveChatConfiguration) {
         self.configuration = configuration
         self.api = HiveAPIClient(host: configuration.host, widgetKey: configuration.widgetKey)
 
@@ -110,7 +117,6 @@ public final class HiveChat: ObservableObject {
             configuration.tokenStore.save(self.visitorToken)
         }
 
-        observeAppLifecycle()
     }
 
     deinit {
@@ -180,6 +186,7 @@ public final class HiveChat: ObservableObject {
 
     /// Opens the socket. Safe to call repeatedly.
     public func connect() {
+        observeAppLifecycle()
         guard connection == nil else {
             connection?.reconnectNow()
             return
@@ -341,10 +348,10 @@ public final class HiveChat: ObservableObject {
 
         typingResetTask?.cancel()
         guard isTyping else { return }
-        typingResetTask = Task { [weak self] in
+        typingResetTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
-            await self?.connection?.emit("chat:typing", ["typing": false, "text": ""])
+            self?.connection?.emit("chat:typing", ["typing": false, "text": ""])
         }
     }
 
@@ -664,6 +671,7 @@ public final class HiveChat: ObservableObject {
     // MARK: - App lifecycle
 
     private func observeAppLifecycle() {
+        guard lifecycleObservers.isEmpty else { return }
         #if canImport(UIKit) && !os(watchOS)
         /* iOS suspends WebSockets when the app backgrounds, and the client
            usually does not find out until a write fails — which, for a screen

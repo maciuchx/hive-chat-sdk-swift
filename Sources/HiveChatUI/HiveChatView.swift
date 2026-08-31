@@ -144,8 +144,8 @@ public struct HiveChatView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
             }
-            .onChange(of: chat.messages.count) { _ in scrollToBottom(proxy) }
-            .onChange(of: chat.isAgentTyping) { _ in scrollToBottom(proxy) }
+            .onChange(of: chat.messages.count) { scrollToBottom(proxy) }
+            .onChange(of: chat.isAgentTyping) { scrollToBottom(proxy) }
         }
     }
 
@@ -225,8 +225,8 @@ struct Composer: View {
                 .padding(.vertical, 9)
                 .background(HivePalette.secondaryBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 20))
-                .onChange(of: draft) { newValue in
-                    onTypingChanged(!newValue.isEmpty)
+                .onChange(of: draft) {
+                    onTypingChanged(!draft.isEmpty)
                 }
                 .onSubmit(send)
 
@@ -382,8 +382,6 @@ struct ArticleReaderView: View {
         }
     }
 }
-
-extension KnowledgeBaseArticle: @retroactive Identifiable {}
 
 extension KnowledgeBaseArticle {
     var attributedBody: AttributedString? {

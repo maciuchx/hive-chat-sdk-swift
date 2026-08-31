@@ -4,17 +4,19 @@ import PackageDescription
 let package = Package(
     name: "HiveChat",
     platforms: [
-        /* iOS 16 is the floor: it is where `TextField(axis:)`,
-           `UnevenRoundedRectangle` and `scrollDismissesThe keyboard` land,
-           all three of which HiveChatUI would otherwise hand-roll. The core
-           target touches no SwiftUI and would run happily on iOS 13 — an app
-           stuck on an older floor can depend on `HiveChat` alone.
+        /* iOS 17 is the floor. iOS 16 worked until HiveChatUI wanted the
+           modern zero-parameter `onChange`, whose predecessor is deprecated
+           from 17 — and carrying a deprecated call to keep a four-year-old OS
+           puts warnings in every consumer's build that they cannot fix. The
+           core target touches no SwiftUI and would run happily on iOS 13, so
+           an app on an older floor can depend on `HiveChat` alone, or pin
+           0.1.x which supported iOS 16.
 
            tvOS and watchOS are deliberately not claimed. Nothing here is
            designed for a remote or a 45mm screen, and claiming a platform
            the UI has never been laid out for is a promise this package
            cannot keep. */
-        .iOS(.v16),
+        .iOS(.v17),
         .macOS(.v14),
         .visionOS(.v1),
     ],
