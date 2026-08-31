@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: swift build --build-tests
+
+      # The live integration tests skip themselves without HIVE_WIDGET_KEY,
+      # which is exactly what should happen here: CI has no widget, and a
+      # test that reached a real merchant's inbox on every push would be a
+      # bad neighbour.
+      - name: Test
+        run: swift test
+
+  ios:
+    name: Build for iOS
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # `swift build` compiles for the host, so a macOS-only run would let an
+      # iOS-only break through — a UIKit-only spelling of a system colour, say,
+      # which is exactly the class of error this package hit while being written.
+      - name: Build both products for iOS
+        run: |
+          set -o pipefail
+          for scheme in HiveChat HiveChatUI; do
+            xcodebuild -scheme "$scheme" -destination 'generic/platform=iOS' -quiet build
+          done
