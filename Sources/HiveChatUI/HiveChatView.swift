@@ -395,7 +395,11 @@ struct Composer: View {
                 }
                 .onSubmit(send)
 
-            if voiceMessagesEnabled && trimmed.isEmpty {
+            /* The mic gives way the moment someone is clearly composing text —
+               either they have typed something, or the field is focused and
+               the keyboard is up, which is intent enough. It comes back when
+               they dismiss the keyboard without having typed. */
+            if voiceMessagesEnabled && trimmed.isEmpty && !isFocused {
                 Button {
                     Task { try? await recorder.start() }
                 } label: {

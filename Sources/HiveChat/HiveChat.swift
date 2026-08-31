@@ -390,6 +390,63 @@ public final class HiveChat: ObservableObject {
         satisfactionRequest = nil
     }
 
+    /// Tells the team which screen the customer is on.
+    ///
+    /// On the web an agent sees the page someone is browsing, which is half of
+    /// how they answer "where's my order?" before it is asked. An app has no
+    /// URL, so pass something that reads well in the agent panel — a screen
+    /// name, and ideally the thing being looked at.
+    ///
+    /// ```swift
+    /// chat.trackScreen("Product", title: "Slim Fit Suit", reference: "slim-fit-suit")
+    /// ```
+    ///
+    /// Safe to call before a conversation exists: it is recorded against the
+    /// visitor either way, so an agent picking the chat up can see what they
+    /// were looking at beforehand.
+    public func trackScreen(_ screen: String, title: String? = nil, reference: String? = nil) {
+        let name = screen.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        /* Shaped as a URL because that is the column it lands in and what the
+           agent panel renders. `app://` says plainly this was not a web page,
+           rather than dressing it up as one an agent might try to open. */
+        var path = name.lowercased().replacingOccurrences(of: " ", with: "-")
+        if let reference = reference?.trimmingCharacters(in: .whitespacesAndNewlines), !reference.isEmpty {
+            path += "/" + reference
+        }
+        connection?.emit("page:update", [
+            "url": "app://ios/" + path,
+            "title": title ?? name,
+        ])
+    }
+
+    /// Mirrors the customer's basket to the team.
+    ///
+    /// An agent seeing what is in the basket can answer "will this arrive
+    /// before Friday?" without asking the customer to read their order back.
+    /// Call it when the basket changes; only the latest state is kept.
+    ///
+    /// - Parameters:
+    ///   - total: formatted as you would show it, e.g. `"129.99"`
+    ///   - currency: ISO code, e.g. `"GBP"`
+    public func updateCart(items: [CartItem], total: String, currency: String) {
+        connection?.emit("cart:update", [
+            "items": items.map { item -> [String: Any] in
+                var payload: [String: Any] = [
+                    "title": item.title,
+                    "quantity": item.quantity,
+                    "price": item.price,
+                ]
+                if let variant = item.variant { payload["variant"] = variant }
+                if let imageURL = item.imageURL { payload["image"] = imageURL.absoluteString }
+                return payload
+            },
+            "total": total,
+            "currency": currency,
+            "count": items.reduce(0) { $0 + $1.quantity },
+        ])
+    }
+
     /// Gives the customer's email to the team mid-conversation — what the
     /// offline form collects.
     public func provideEmail(_ email: String) {

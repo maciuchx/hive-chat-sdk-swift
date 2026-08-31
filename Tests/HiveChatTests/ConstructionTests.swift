@@ -52,3 +52,50 @@ final class ConstructionTests: XCTestCase {
         XCTAssertEqual(stored, first, "a second client must adopt the stored token, not mint a new one")
     }
 }
+
+/// Compile-time proof that the public API the README documents actually
+/// exists.
+///
+/// `trackScreen` and `updateCart` were documented, released and *absent* from
+/// the source for a whole version: an edit silently failed to apply, and
+/// because nothing in the package called them, the build stayed green all the
+/// way to a tag. An integrator found them missing. These tests do not assert
+/// behaviour — calling them is the assertion.
+final class PublicAPISurfaceTests: XCTestCase {
+
+    @MainActor
+    private func makeChat() -> HiveChat {
+        HiveChat(configuration: .init(widgetKey: "hv_test", tokenStore: .ephemeral()))
+    }
+
+    @MainActor
+    func testContextMethodsExist() {
+        let chat = makeChat()
+        /* Safe with no connection: every one of these is a no-op until a
+           socket exists, which is the point — a host app calls them on
+           navigation, long before anyone opens the chat. */
+        chat.trackScreen("Product", title: "Slim Fit Suit", reference: "slim-fit-suit")
+        chat.trackScreen("Basket")
+        chat.updateCart(
+            items: [CartItem(title: "Slim Fit Suit", quantity: 1, price: "129.99", variant: "40R")],
+            total: "129.99",
+            currency: "GBP"
+        )
+    }
+
+    @MainActor
+    func testConversationMethodsExist() {
+        let chat = makeChat()
+        chat.identify(name: "Alex", email: "alex@example.com")
+        chat.send("hello")
+        chat.setTyping(true)
+        chat.markRead()
+        chat.requestHuman()
+        chat.toggleReaction("👍", on: "cmsg_1")
+        chat.submitCSAT(rating: 5)
+        chat.provideEmail("alex@example.com")
+        chat.endChat()
+        chat.recordConsent(text: "I agree")
+        chat.redeemHandoffCode("ABC123")
+    }
+}

@@ -6,6 +6,21 @@ semantic versioning from 1.0 onwards.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-31
+
+### Fixed
+- **`trackScreen(_:title:reference:)` and `updateCart(items:total:currency:)`
+  now actually exist.** 0.4.0 shipped their documentation and `CartItem` but
+  not the methods themselves — an edit failed to apply silently, and because
+  nothing in the package called them the build stayed green all the way to a
+  release. A new test calls every public method, so a missing one is now a
+  compile error rather than something an integrator discovers.
+
+### Changed
+- The microphone gives way as soon as the message field is focused, not only
+  once something is typed: a raised keyboard is intent enough. It returns when
+  the keyboard is dismissed with nothing written.
+
 ## [0.4.0] — 2026-08-31
 
 ### Fixed
