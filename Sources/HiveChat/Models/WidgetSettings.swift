@@ -1,7 +1,7 @@
 import Foundation
 
 /// The merchant's widget settings, fetched from
-/// `GET /api/livechat/widget-config/:widgetKey`.
+/// `GET /livechat/widget-config/:widgetKey`.
 ///
 /// The same document drives the web widget, so it carries a lot of
 /// browser-specific styling (bubble offsets, launcher position, URL

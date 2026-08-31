@@ -66,7 +66,13 @@ extension Color {
     /// Parses `#RRGGBB` / `#RGB` / `#RRGGBBAA`, the shapes the dashboard's
     /// colour picker can produce. Returns nil rather than a wrong colour, so
     /// the caller falls back to its default.
-    public init?(hex: String) {
+    ///
+    /// Deliberately internal. As `public` this added an initialiser to a
+    /// SwiftUI type that host apps very commonly define themselves, and the
+    /// two were indistinguishable at the call site: importing HiveChatUI broke
+    /// every existing `Color(hex:)` in the app with "ambiguous use of
+    /// init(hex:)". A chat SDK has no business claiming that name.
+    init?(hex: String) {
         var value = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.hasPrefix("#") { value.removeFirst() }
         guard let number = UInt64(value, radix: 16) else { return nil }
