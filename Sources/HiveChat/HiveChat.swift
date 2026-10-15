@@ -83,6 +83,8 @@ public final class HiveChat: ObservableObject {
     private var visitorToken: String
     private var visitorName: String?
     private var visitorEmail: String?
+    private var visitorUserId: String?
+    private var visitorUserHash: String?
     private var consentText: String?
     private var handoffCode: String?
 
@@ -133,18 +135,29 @@ public final class HiveChat: ObservableObject {
     /// Call before ``start()`` when you already know — a signed-in app should.
     /// Calling later is fine too; it updates the live conversation.
     ///
-    /// - Important: Hive does not currently verify this. Anything your app
-    ///   sends is taken at face value, so treat it as a display convenience,
-    ///   not as authentication of who the customer is.
-    public func identify(name: String? = nil, email: String? = nil) {
+    /// To have the customer **verified**, pass `userHash`: an HMAC-SHA256 of
+    /// the email (lowercased) — or of `userId` when you have no email — made
+    /// by *your server* with the widget's identity secret (Hive → Settings →
+    /// Developers → Mobile SDKs). Never put the secret in the app. Hive then
+    /// marks the chat "Verified by your site or app" and the email can't be
+    /// changed from the chat. A hash that doesn't match is ignored together
+    /// with the name and email that came with it. Without a hash, what you
+    /// send is shown but unverified.
+    public func identify(name: String? = nil, email: String? = nil, userId: String? = nil, userHash: String? = nil) {
         if let name, !name.isEmpty { visitorName = name }
         if let email, !email.isEmpty { visitorEmail = email }
+        if let userId, !userId.isEmpty { visitorUserId = userId }
+        if let userHash, !userHash.isEmpty { visitorUserHash = userHash }
+        refreshAuthSnapshot()
 
         guard connectionState == .connected else { return }
-        connection?.emit("visitor:info", [
+        var info: [String: Any] = [
             "name": visitorName ?? "",
             "email": visitorEmail ?? "",
-        ])
+        ]
+        if let visitorUserId { info["userId"] = visitorUserId }
+        if let visitorUserHash { info["userHash"] = visitorUserHash }
+        connection?.emit("visitor:info", info)
     }
 
     /// Records that the customer accepted the merchant's data-consent wording.
@@ -230,7 +243,8 @@ public final class HiveChat: ObservableObject {
         connectionState = .disconnected
     }
 
-    private let authSnapshot = AuthSnapshot()
+    // Internal so tests can read what the handshake will carry.
+    let authSnapshot = AuthSnapshot()
 
     private func refreshAuthSnapshot() {
         var auth: [String: Any] = [
@@ -239,6 +253,8 @@ public final class HiveChat: ObservableObject {
             "name": visitorName ?? "",
             "email": visitorEmail ?? "",
         ]
+        if let visitorUserId { auth["userId"] = visitorUserId }
+        if let visitorUserHash { auth["userHash"] = visitorUserHash }
         if let handoffCode { auth["handoffCode"] = handoffCode }
         if let consentText { auth["consentText"] = consentText }
         /* pageUrl/pageTitle/referrer are web concepts the agent panel shows
@@ -580,7 +596,7 @@ public final class HiveChat: ObservableObject {
         /* Re-assert identity on every connect. The handshake carries it too,
            but a name captured by a pre-chat form after the socket opened
            would otherwise not reach the agent panel until the next reconnect. */
-        if visitorName != nil || visitorEmail != nil { identify() }
+        if visitorName != nil || visitorEmail != nil || visitorUserHash != nil { identify() }
         flushOutbox()
     }
 

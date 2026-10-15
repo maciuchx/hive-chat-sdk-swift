@@ -51,7 +51,7 @@ https://github.com/maciuchx/hive-chat-sdk-swift
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.8.0")
+    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.9.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -105,10 +105,18 @@ threads onto that customer's record and order history.
 chat.identify(name: customer.name, email: customer.email)
 ```
 
-> **Identity is not verified.** Hive currently takes whatever your app sends at
-> face value. Treat it as a display convenience, not proof of who the customer
-> is, and do not put anything in it you would not show a stranger. Signed
-> identity is on the roadmap — see [PROTOCOL.md](PROTOCOL.md#identity).
+On its own that is **unverified** — shown to the agent, not proof of who is
+talking. To verify the customer, have **your server** sign their email with the
+widget's identity secret (Hive → Settings → Developers → Mobile SDKs) and pass
+the result:
+
+```swift
+// userHash = hex(HMAC-SHA256(identitySecret, email.lowercased())) — made on your server
+chat.identify(name: customer.name, email: customer.email, userHash: hashFromYourServer)
+```
+
+Never put the identity secret in the app. No email? Pass `userId:` and sign
+that instead. See [PROTOCOL.md](PROTOCOL.md#8-identity).
 
 ### Show the chat
 

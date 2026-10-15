@@ -98,4 +98,21 @@ final class PublicAPISurfaceTests: XCTestCase {
         chat.recordConsent(text: "I agree")
         chat.redeemHandoffCode("ABC123")
     }
+
+    @MainActor
+    func testSignedIdentityReachesTheHandshake() {
+        let chat = makeChat()
+        chat.identify(name: "Alex", email: "alex@example.com", userId: "42", userHash: "abc123")
+        let auth = chat.authSnapshot.value
+        XCTAssertEqual(auth["email"] as? String, "alex@example.com")
+        XCTAssertEqual(auth["userId"] as? String, "42")
+        XCTAssertEqual(auth["userHash"] as? String, "abc123")
+    }
+
+    @MainActor
+    func testUnsignedIdentityCarriesNoHash() {
+        let chat = makeChat()
+        chat.identify(name: "Alex", email: "alex@example.com")
+        XCTAssertNil(chat.authSnapshot.value["userHash"])
+    }
 }

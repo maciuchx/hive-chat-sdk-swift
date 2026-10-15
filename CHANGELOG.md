@@ -6,6 +6,14 @@ semantic versioning from 1.0 onwards.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-15
+
+### Added
+- Verified customers: `identify(name:email:userId:userHash:)`. Your server signs
+  the customer's email (or id) with the widget's identity secret; Hive checks
+  it and marks the chat verified, so nobody can chat as someone else. Existing
+  `identify(name:email:)` calls compile unchanged.
+
 ## [0.8.0] — 2026-08-31
 
 ### Deprecated

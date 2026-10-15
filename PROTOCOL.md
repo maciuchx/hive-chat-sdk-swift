@@ -35,7 +35,8 @@ Auth travels in the Socket.IO CONNECT packet (`40/livechat/visitor,{…}`):
 |---|---|---|
 | `widgetKey` | ✅ | Public widget key. No `widgetKey` → immediate disconnect; unknown key → `error` event then disconnect. |
 | `visitorToken` | — | Stable per-device id. **This is what makes history work** — the same token gets the conversation back. Mint `v_<random><base36 time>` on first run and persist it. |
-| `name`, `email` | — | Display identity. Unverified (see [Identity](#identity)). |
+| `name`, `email` | — | Display identity. Unverified unless signed (see [Identity](#identity)). |
+| `userId`, `userHash` | — | Signed identity (0.9.0+). See [Identity](#identity). |
 | `handoffCode` | — | One-time code from a "continue this chat here" link. Single use. |
 | `consentText` | — | Exact wording the customer agreed to. Stored as the audit trail. |
 | `pageUrl`, `pageTitle`, `referrer` | — | What the agent panel shows as context. Native clients send `app://<bundle id>` and the app's display name. |
@@ -117,7 +118,7 @@ thread 1970 and sorts the conversation inside out.
 | `chat:message` | `{ body }` | Creates the session if there isn't one. |
 | `chat:typing` | `{ typing, text? }` | `text` shows the agent what is being typed live — send it only if you mean to. |
 | `chat:read` | — | Marks all agent/bot messages read. |
-| `visitor:info` | `{ name, email }` | Update identity mid-conversation. |
+| `visitor:info` | `{ name, email, userId?, userHash? }` | Update identity mid-conversation; with `userHash`, sign the customer in. |
 | `visitor:email` | `{ email }` | Email only — what the offline form collects. |
 | `chat:request-human` | — | Escalate off the bot into the queue. |
 | `chat:end` | — | Close the conversation. Idempotent. |
@@ -221,17 +222,31 @@ the moment an app backgrounds.
 
 ## 8. Identity
 
-**Today, identity is unverified.** `name` and `email` are taken at face value.
-Fine for an anonymous web widget where nothing is claimed; weaker in a
-signed-in app, where a customer's name appearing next to a conversation
-implies the app vouched for it.
+`name` and `email` on their own are unverified: shown to the agent, taken at
+face value, never proof of who is talking.
 
-**Planned:** an HMAC signature over the customer id, computed on the
-merchant's backend with a per-widget secret that never ships in the app —
-the pattern Intercom and Zendesk use. Until then:
+**Signed identity (server 2026-10-15, SDK 0.9.0).** Each widget can have an
+identity secret (Hive → Settings → Developers → Mobile SDKs). It lives on the
+merchant's backend only — never in the app. For a signed-in customer the
+backend computes
 
-- Do not treat the name/email on a conversation as proof of who is talking.
-- Do not put anything in identity fields you would not show a stranger.
+    userHash = hex(HMAC-SHA256(identitySecret, email.trim().lowercase()))
+
+or, when it has no email for them, the same over its own customer id (sent as
+`userId`). The app passes `email` (and/or `userId`) plus `userHash` in the
+handshake or in `visitor:info`. The server:
+
+- **match** — marks the conversation verified (`identity_verified_via = 'app'`);
+  the agent sees "Verified by your site or app" instead of the
+  unverified-email warning, and a signed email can no longer be changed by
+  `visitor:email` / `visitor:info` from that connection.
+- **mismatch** — drops the name and email that came with it (a wrong hash
+  means tampering or a stale secret) and logs it. The connection stays up.
+- **no hash** — exactly as before: unverified.
+
+The email is what's signed rather than an id beside it, so a customer can't
+pair their own valid hash with someone else's address. Rotating the secret
+in the dashboard stops old hashes verifying at once.
 
 ---
 
