@@ -6,6 +6,45 @@ semantic versioning from 1.0 onwards.
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-11-11
+
+Needs a Hive server from the current release for the message acknowledgement,
+voice uploads and the hosted handoff link.
+
+### Fixed
+- **Sent messages get their real id.** The server does not echo the
+  customer's own message back, so the optimistic `local_…` copy kept its local
+  id forever (reactions and read receipts on it never matched). `chat:message`
+  is now sent with an acknowledgement: on success the message takes the
+  server's id and is marked sent; on an error or no answer within 15 seconds it
+  is marked failed. An echo, if one ever arrives, is still not shown twice.
+- **Opening the chat no longer drops a healthy connection.** 0.4.0 said this
+  was fixed, but `connect()` (which `HiveChatView` calls every time it appears)
+  still tore down and re-handshook a live socket. It now does nothing when
+  already connected or connecting, and only reconnects a socket that is down.
+- **Cart quantities show in the dashboard.** `updateCart` now sends each item's
+  quantity as `qty` (what the dashboard reads) as well as `quantity`. A cart
+  set before the customer's first message is re-sent once the conversation
+  starts, instead of being lost.
+- **A chat an agent opens first is picked up properly.** The session id that
+  comes with an agent's invitation is now adopted, so transcript email and
+  device handoff work straight away.
+- **Photos send reliably.** Picked photos were labelled JPEG but sent as-is —
+  usually HEIC on an iPhone, which the server refuses, and often over 5MB.
+  `HiveChatView` now always re-encodes them as JPEG (longest side 2048px,
+  quality stepped down until under 5MB). The file picker offers images and
+  PDFs only, and images picked from Files get the same conversion. Anything
+  still over 5MB is refused with a clear message before uploading.
+
+### Added
+- `HiveChat.maximumUploadBytes` (5MB), the server's upload limit.
+
+### Docs
+- PROTOCOL.md: message acknowledgement, `chat:ended` from agents, `cart:update`
+  item shape, accepted upload types, transcript parameters, the public
+  `/livechat` REST prefix, server-built handoff links, translated restore, and
+  how push works.
+
 ## [0.9.0] — 2026-10-15
 
 ### Added

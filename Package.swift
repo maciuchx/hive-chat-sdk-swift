@@ -31,6 +31,6 @@ let package = Package(
     targets: [
         .target(name: "HiveChat"),
         .target(name: "HiveChatUI", dependencies: ["HiveChat"]),
-        .testTarget(name: "HiveChatTests", dependencies: ["HiveChat"]),
+        .testTarget(name: "HiveChatTests", dependencies: ["HiveChat", "HiveChatUI"]),
     ]
 )

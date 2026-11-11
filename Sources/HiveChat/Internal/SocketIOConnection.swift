@@ -31,9 +31,8 @@ final class SocketIOConnection: NSObject, @unchecked Sendable {
     private var pendingReconnect: DispatchWorkItem?
 
     /* Socket.IO acks are a request/response pair keyed by an integer the
-       client picks. `chat:handoff:create` is the only visitor event that
-       uses one today, but a shipped SDK cannot add the plumbing later
-       without a release, so it goes in now. */
+       client picks. `chat:message` (the server answers with the stored
+       message's id) and `chat:handoff:create` use them. */
     private var ackCounter = 0
     private var pendingAcks: [Int: @Sendable ([Any]) -> Void] = [:]
 
@@ -225,7 +224,15 @@ final class SocketIOConnection: NSObject, @unchecked Sendable {
         }
     }
 
-    func emit(_ event: String, _ payload: [String: Any] = [:], ack: @escaping @Sendable ([Any]) -> Void) {
+    /// Emits with a Socket.IO acknowledgement. `ack` is called exactly once:
+    /// with the server's reply, or with an empty array on timeout or when the
+    /// socket drops first.
+    func emit(
+        _ event: String,
+        _ payload: [String: Any] = [:],
+        timeout: TimeInterval = 5,
+        ack: @escaping @Sendable ([Any]) -> Void
+    ) {
         queue.async {
             self.ackCounter += 1
             let id = self.ackCounter
@@ -237,9 +244,8 @@ final class SocketIOConnection: NSObject, @unchecked Sendable {
             self.write("42\(self.namespace),\(id)\(json)")
 
             /* An ack the server never sends would pin the callback (and
-               whatever it captures) forever. Five seconds is generous for a
-               round trip that only mints a code. */
-            self.queue.asyncAfter(deadline: .now() + 5) {
+               whatever it captures) forever. */
+            self.queue.asyncAfter(deadline: .now() + timeout) {
                 guard let handler = self.pendingAcks.removeValue(forKey: id) else { return }
                 handler([])
             }

@@ -67,14 +67,14 @@ Consequences for a client:
 | Event | Payload | Meaning |
 |---|---|---|
 | `chat:session` | `{ sessionId, welcome_message }` | Session id, or `null` if not created yet. |
-| `chat:restore` | `{ sessionId, status, messages[] }` | **Always fires after connect**, with `sessionId: null` when there is nothing to resume. Up to 200 messages, oldest first. Rebuild the thread from this — do not append, or a reconnect duplicates it. |
-| `chat:message` | message object | New message either way; the server echoes the customer's own back. |
+| `chat:restore` | `{ sessionId, status, messages[] }` | **Always fires after connect**, with `sessionId: null` when there is nothing to resume. Up to 200 messages, oldest first. Rebuild the thread from this — do not append, or a reconnect duplicates it. Agent messages come back in the customer's language (the translated text). |
+| `chat:message` | message object | New message from the team. The server does **not** echo the customer's own message back — it acknowledges the emit instead (see §4). |
 | `chat:typing` | `{ typing, name }` | Agent typing state. |
 | `chat:read` | `{ sessionId, messageIds[], readBy }` | Agent read the customer's messages. |
 | `chat:transfer` | `{ message }` | Being connected to a human. Show as a system line. |
 | `chat:offline` | `{ message }` | Nobody available — collect an email instead. Fires *mid-chat*, not on connect. |
 | `chat:queue-position` | `{ sessionId, position, ahead, total }` | 1-based place in the queue. |
-| `chat:ended` | `{ sessionId }` | Conversation closed. The next customer message reopens it. |
+| `chat:ended` | `{ sessionId, by: "visitor" \| "agent" }` | Conversation closed — by the customer (`chat:end`), or by an agent ending it or converting it to a ticket. The next customer message reopens it. |
 | `chat:reactions` | `{ message_id, reactions[] }` | Full reaction set for one message, with a `mine` flag for this viewer. |
 | `chat:message:enriched` | `{ messageId, metadata }` | Link previews arriving after the fact — `metadata.url_previews[]`. |
 | `agents:status` | `{ online, count }` | Whether any human is available. |
@@ -115,7 +115,7 @@ thread 1970 and sorts the conversation inside out.
 
 | Event | Payload | Notes |
 |---|---|---|
-| `chat:message` | `{ body }` | Creates the session if there isn't one. |
+| `chat:message` | `{ body }` + **ack** | Creates the session if there isn't one. Ack: `{ ok: true, id, created_at }` — `id` is the stored message's server id; swap your local id for it — or `{ ok: false, error }`. The server does not echo the message back. |
 | `chat:typing` | `{ typing, text? }` | `text` shows the agent what is being typed live — send it only if you mean to. |
 | `chat:read` | — | Marks all agent/bot messages read. |
 | `visitor:info` | `{ name, email, userId?, userHash? }` | Update identity mid-conversation; with `userHash`, sign the customer in. |
@@ -124,11 +124,12 @@ thread 1970 and sorts the conversation inside out.
 | `chat:end` | — | Close the conversation. Idempotent. |
 | `chat:reaction:toggle` | `{ messageId, emoji }` | Toggles: same emoji twice removes it. |
 | `csat:submit` | `{ rating, comment? }` | Rating clamped to 1–5. |
-| `chat:handoff:create` | `{ pageUrl? }` + **ack** | Ack: `{ ok, code, url, qrSvg, expiresInMinutes }` or `{ ok: false, error }`. Requires a session. |
+| `chat:handoff:create` | `{ pageUrl? }` + **ack** | Ack: `{ ok, code, url, qrSvg, expiresInMinutes }` or `{ ok: false, error }`. Requires a session. If the client sends no http(s) `pageUrl`, the server links to its hosted chat page (`/chat.html?key=…&hive_chat=CODE`). |
 | `page:update` | `{ url, title }` | Web navigation tracking. Native clients may send screen names. |
-| `cart:update` | `{ items, total, currency, count }` | Shopify cart mirroring. |
+| `cart:update` | `{ items, total, currency, count }` | Cart mirroring. Each item: `{ title, variant?, price, qty, quantity?, image?, url? }` — `qty` is what the dashboard reads. A cart sent before the first message is kept and applied when the session starts. |
 
-`chat:handoff:create` is the **only** visitor event using an ack callback.
+`chat:message` and `chat:handoff:create` are the visitor events that use an
+ack callback.
 
 ---
 
@@ -178,18 +179,17 @@ the server without waiting for every app in the App Store to catch up.
 
 ## 6. REST endpoints
 
-All unauthenticated; the widget key is the only credential. Mounted at both
-`/livechat/…` and `/api/livechat/…` — **prefer `/api`**, which is the prefix
-guaranteed to be proxied.
+All unauthenticated; the widget key is the only credential. Use the public
+`/livechat/…` prefix — `/api/livechat/…` requires a dashboard login.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/livechat/widget-config/:widgetKey` | Branding, welcome text, online state, featured articles. `{ widget_enabled: false }` alone means switched off. |
-| `GET` | `/api/livechat/widget-kb-search?widget_key=&q=` | Help article search → `{ results[] }`. |
-| `GET` | `/api/livechat/widget-article/:id` | One article → `{ id, title, html, helpful_count, not_helpful_count }`. |
-| `POST` | `/api/livechat/widget-upload` | Multipart: `file` + `widgetKey`. → `{ url, name, size, contentType }`. **5 MB cap**, 413 above it. |
-| `GET` | `/api/livechat/widget-transcript/:sessionId` | Transcript. |
-| `POST` | `/api/livechat/widget-transcript/:sessionId/email` | `{ visitor_token, email }`. The token must match the session. |
+| `GET` | `/livechat/widget-config/:widgetKey` | Branding, welcome text, online state, featured articles. `{ widget_enabled: false }` alone means switched off. |
+| `GET` | `/livechat/widget-kb-search?widget_key=&q=` | Help article search → `{ results[] }`. |
+| `GET` | `/livechat/widget-article/:id` | One article → `{ id, title, html, helpful_count, not_helpful_count }`. |
+| `POST` | `/livechat/widget-upload` | Multipart: `file` + `widgetKey`. → `{ url, name, size, contentType }`. Accepts JPEG, PNG, GIF, WebP, PDF, and `audio/mp4` / `audio/x-m4a` / `audio/aac` / `audio/mpeg`. **5 MB cap**, 413 above it. HEIC is not accepted — the client must convert it to JPEG. |
+| `GET` | `/livechat/widget-transcript/:sessionId?visitor_token=…` | Transcript. `visitor_token` is required and must match the session; optional `&format=html\|txt`. |
+| `POST` | `/livechat/widget-transcript/:sessionId/email` | `{ visitor_token, email }`. The token must match the session. |
 
 ### Sending a file
 
@@ -254,10 +254,9 @@ in the dashboard stops old hashes verifying at once.
 
 Real, and unlikely to be what you assume:
 
-- **No push notifications.** No APNs/FCM anywhere in Hive. A backgrounded app
-  is a disconnected app.
-- **The web widget does not render `__META_ATTACHMENT__`.** An agent who sends
-  a file to a *web* visitor shows them raw sentinel text. The SDKs render it
-  properly; the widget needs the same fix.
+- **Hive does not send push notifications itself.** A backgrounded app is a
+  disconnected app. Push is done by the merchant's backend, driven by Hive's
+  `chat.message.undelivered` webhook (or the push-events pull feed), keyed by
+  the visitor token.
 - **No visitor-side edit or delete.**
 - **Rate limiting is not documented** and should not be assumed absent.

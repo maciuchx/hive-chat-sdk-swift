@@ -85,16 +85,19 @@ public struct HiveChatView: View {
                 defer { self.photoItem = nil }
                 do {
                     guard let data = try await photoItem.loadTransferable(type: Data.self) else { return }
-                    /* PhotosPicker hands back the asset's data without naming
-                       it; the extension only has to be honest enough for the
-                       server to pick a Content-Type. */
-                    try await chat.send(fileData: data, filename: "photo.jpg", contentType: "image/jpeg")
+                    /* PhotosPicker hands back the original asset — usually
+                       HEIC on an iPhone, which the server refuses, and often
+                       over the 5MB limit. Always re-encode to JPEG. */
+                    try await sendImage(data, originalName: nil)
                 } catch {
                     errorMessage = error.localizedDescription
                 }
             }
         }
-        .fileImporter(isPresented: $isShowingFileImporter, allowedContentTypes: [.item]) { result in
+        /* Only what the server accepts: images (converted to JPEG below) and
+           PDFs. Offering every file type just to refuse it after upload is a
+           worse experience than not offering it. */
+        .fileImporter(isPresented: $isShowingFileImporter, allowedContentTypes: [.image, .pdf]) { result in
             guard case .success(let url) = result else { return }
             Task {
                 /* A file outside the app's container needs the security scope
@@ -104,11 +107,11 @@ public struct HiveChatView: View {
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                 do {
                     let data = try Data(contentsOf: url)
-                    try await chat.send(
-                        fileData: data,
-                        filename: url.lastPathComponent,
-                        contentType: url.mimeType
-                    )
+                    if let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image) {
+                        try await sendImage(data, originalName: url.lastPathComponent)
+                    } else {
+                        try await sendChecked(data, filename: url.lastPathComponent, contentType: url.mimeType)
+                    }
                 } catch {
                     errorMessage = error.localizedDescription
                 }
@@ -262,6 +265,24 @@ public struct HiveChatView: View {
         }
     }
 
+    /// Re-encodes a picked image as a downscaled JPEG and sends it.
+    private func sendImage(_ data: Data, originalName: String?) async throws {
+        guard let jpeg = await Task.detached(priority: .userInitiated, operation: {
+            ImageEncoding.jpeg(from: data, limitBytes: HiveChat.maximumUploadBytes)
+        }).value else {
+            throw ImageSendError.unreadable
+        }
+        try await sendChecked(jpeg, filename: ImageEncoding.jpegFilename(for: originalName), contentType: "image/jpeg")
+    }
+
+    /// Refuses anything over the server's limit before a byte is uploaded.
+    private func sendChecked(_ data: Data, filename: String, contentType: String) async throws {
+        guard data.count <= HiveChat.maximumUploadBytes else {
+            throw HiveChatError.fileTooLarge(limitBytes: HiveChat.maximumUploadBytes)
+        }
+        try await chat.send(fileData: data, filename: filename, contentType: contentType)
+    }
+
     private func sendRecording() {
         guard let recording = recorder.stopAndTake() else {
             errorMessage = "That recording was too short."
@@ -269,11 +290,7 @@ public struct HiveChatView: View {
         }
         Task {
             do {
-                try await chat.send(
-                    fileData: recording.data,
-                    filename: recording.filename,
-                    contentType: "audio/mp4"
-                )
+                try await sendChecked(recording.data, filename: recording.filename, contentType: "audio/mp4")
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -575,5 +592,13 @@ extension KnowledgeBaseArticle {
             documentAttributes: nil
         ) else { return nil }
         return try? AttributedString(ns, including: \.foundation)
+    }
+}
+
+private enum ImageSendError: LocalizedError {
+    case unreadable
+
+    var errorDescription: String? {
+        "That image couldn't be read. Try a different photo."
     }
 }

@@ -93,6 +93,12 @@ public final class HiveChat: ObservableObject {
     /// worse than one that admits it is offline.
     private var outbox: [(localID: String, body: String)] = []
 
+    /// The last basket passed to ``updateCart(items:total:currency:)``. A
+    /// basket set before the conversation exists (or while offline) is sent
+    /// again once, as soon as a session id is known, so it is not lost.
+    private var lastCart: [String: Any]?
+    private var cartAwaitingSession = false
+
     private var typingResetTask: Task<Void, Never>?
     private var lifecycleObservers: [NSObjectProtocol] = []
 
@@ -197,12 +203,26 @@ public final class HiveChat: ObservableObject {
         }
     }
 
-    /// Opens the socket. Safe to call repeatedly.
+    /// Opens the socket. Safe to call repeatedly: a socket that is already
+    /// connected or connecting is left alone.
     public func connect() {
         observeAppLifecycle()
-        guard connection == nil else {
-            connection?.reconnectNow()
-            return
+        if let existing = connection {
+            /* Already wired up. Only nudge it when it is not live — calling
+               reconnectNow() unconditionally tore down a healthy socket every
+               time the chat screen opened, so the customer watched it say
+               "Connecting…" and re-handshake for no reason. */
+            switch connectionState {
+            case .connected, .connecting:
+                return
+            case .reconnecting, .disconnected, .failed:
+                /* reconnectNow() skips the backoff of a running socket;
+                   connect() restarts one that has stopped. Each is a no-op
+                   in the other's case. */
+                existing.reconnectNow()
+                existing.connect()
+                return
+            }
         }
         /* The merchant switched the widget off. Connecting would be refused
            anyway; failing here says why. */
@@ -275,6 +295,10 @@ public final class HiveChat: ObservableObject {
 
     // MARK: - Sending
 
+    /// The largest file Hive accepts, in bytes (5MB). Images should be
+    /// JPEG-encoded and downscaled before sending; HEIC is not accepted.
+    public nonisolated static let maximumUploadBytes = HiveAPIClient.maximumUploadBytes
+
     /// Sends a message. Appears in ``messages`` immediately as
     /// ``ChatMessage/DeliveryState/sending`` and is queued if the socket is
     /// down.
@@ -294,6 +318,11 @@ public final class HiveChat: ObservableObject {
         filename: String,
         contentType: String
     ) async throws {
+        /* Refuse before anything appears in the thread: a "failed" bubble for
+           a file that was never going to be accepted is noise. */
+        guard fileData.count <= Self.maximumUploadBytes else {
+            throw HiveChatError.fileTooLarge(limitBytes: Self.maximumUploadBytes)
+        }
         let localID = "local_\(UUID().uuidString)"
         let pending = Attachment(
             kind: Attachment.kind(forContentType: contentType),
@@ -315,9 +344,8 @@ public final class HiveChat: ObservableObject {
                   let string = String(data: json, encoding: .utf8)
             else { throw HiveChatError.invalidResponse }
 
-            /* Replace the optimistic echo rather than adding a second row:
-               the server's own copy will arrive with a real id and we drop
-               ours when it does. */
+            /* Replace the upload placeholder with the message echo; the
+               server's acknowledgement then gives it its real id. */
             removeLocalEcho(id: localID)
             enqueue(
                 body: "\(MessageContent.Sentinel.visitorFile)\(string)",
@@ -446,10 +474,13 @@ public final class HiveChat: ObservableObject {
     ///   - total: formatted as you would show it, e.g. `"129.99"`
     ///   - currency: ISO code, e.g. `"GBP"`
     public func updateCart(items: [CartItem], total: String, currency: String) {
-        connection?.emit("cart:update", [
+        let cart: [String: Any] = [
             "items": items.map { item -> [String: Any] in
                 var payload: [String: Any] = [
                     "title": item.title,
+                    /* `qty` is what the agent dashboard reads; `quantity` is
+                       kept for servers that predate accepting both. */
+                    "qty": item.quantity,
                     "quantity": item.quantity,
                     "price": item.price,
                 ]
@@ -460,7 +491,10 @@ public final class HiveChat: ObservableObject {
             "total": total,
             "currency": currency,
             "count": items.reduce(0) { $0 + $1.quantity },
-        ])
+        ]
+        lastCart = cart
+        cartAwaitingSession = sessionID == nil || connectionState != .connected
+        connection?.emit("cart:update", cart)
     }
 
     /// No longer supported. Hive does not send push notifications itself.
@@ -551,8 +585,7 @@ public final class HiveChat: ObservableObject {
             outbox.append((localID, body))
             return
         }
-        connection.emit("chat:message", ["body": body])
-        markLocalEcho(id: localID, as: .sent)
+        emitMessage(body: body, localID: localID, on: connection)
     }
 
     private func flushOutbox() {
@@ -560,9 +593,54 @@ public final class HiveChat: ObservableObject {
         let queued = outbox
         outbox.removeAll()
         for item in queued {
-            connection.emit("chat:message", ["body": item.body])
-            markLocalEcho(id: item.localID, as: .sent)
+            emitMessage(body: item.body, localID: item.localID, on: connection)
         }
+    }
+
+    /// Sends one message and waits for the server's acknowledgement. The
+    /// server does not echo the customer's own message back; it answers the
+    /// emit with `{ ok, id, created_at }`, and that is when the optimistic
+    /// echo becomes the real message.
+    private func emitMessage(body: String, localID: String, on connection: SocketIOConnection) {
+        connection.emit("chat:message", ["body": body], timeout: 15) { [weak self] response in
+            let payload = response.first as? [String: Any]
+            let ok = payload?["ok"] as? Bool == true
+            let serverID = (payload?["id"] as? String) ?? (payload?["id"] as? Int).map(String.init)
+            let createdAt = payload?["created_at"] as? String
+            Task { @MainActor in
+                self?.handleMessageAck(localID: localID, ok: ok, serverID: serverID, createdAt: createdAt)
+            }
+        }
+    }
+
+    private func handleMessageAck(localID: String, ok: Bool, serverID: String?, createdAt: String?) {
+        /* Gone already: an echo (should a server ever send one) replaced it,
+           or a restore rebuilt the thread. Nothing left to update. */
+        guard let index = messages.firstIndex(where: { $0.id == localID }) else { return }
+        guard ok else {
+            messages[index].delivery = .failed
+            return
+        }
+        guard let serverID, !serverID.isEmpty else {
+            messages[index].delivery = .sent
+            return
+        }
+        if messages.contains(where: { $0.id == serverID }) {
+            // The server's copy is already in the thread; drop ours.
+            messages.remove(at: index)
+            return
+        }
+        let local = messages[index]
+        messages[index] = ChatMessage(
+            id: serverID,
+            sender: local.sender,
+            senderName: local.senderName,
+            content: local.content,
+            createdAt: createdAt.map { ChatMessage.date(from: $0) } ?? local.createdAt,
+            isRead: local.isRead,
+            reactions: local.reactions,
+            delivery: .sent
+        )
     }
 
     private func appendLocalEcho(id: String, content: MessageContent) {
@@ -606,7 +684,7 @@ public final class HiveChat: ObservableObject {
 
         switch event {
         case "chat:session":
-            sessionID = payload["sessionId"] as? String
+            adoptSessionID(payload["sessionId"] as? String)
 
         case "chat:restore":
             handleRestore(payload)
@@ -650,6 +728,9 @@ public final class HiveChat: ObservableObject {
             /* An agent reached out first. The invitation text arrives as a
                normal chat:message straight after, so there is nothing to
                append here — but the host app may want to open the chat. */
+            if let invitedSession = payload["sessionId"] as? String, !invitedSession.isEmpty {
+                adoptSessionID(invitedSession)
+            }
             onProactiveInvitation?(payload["message"] as? String ?? "")
 
         case "csat:request":
@@ -672,7 +753,7 @@ public final class HiveChat: ObservableObject {
                 configuration.tokenStore.save(token)
                 refreshAuthSnapshot()
             }
-            sessionID = payload["sessionId"] as? String ?? sessionID
+            adoptSessionID(payload["sessionId"] as? String ?? sessionID)
             handoffCode = nil
 
         case "chat:handoff:invalid":
@@ -684,8 +765,19 @@ public final class HiveChat: ObservableObject {
         }
     }
 
+    /// Sets the current session id, and re-sends a basket that was set
+    /// before the session existed — once, the first time an id is known.
+    private func adoptSessionID(_ id: String?) {
+        sessionID = id
+        guard let id, !id.isEmpty, cartAwaitingSession, let lastCart,
+              connectionState == .connected, let connection
+        else { return }
+        cartAwaitingSession = false
+        connection.emit("cart:update", lastCart)
+    }
+
     private func handleRestore(_ payload: [String: Any]) {
-        sessionID = payload["sessionId"] as? String
+        adoptSessionID(payload["sessionId"] as? String)
         hasEnded = (payload["status"] as? String) == "ended"
 
         let restored = (payload["messages"] as? [[String: Any]] ?? [])
@@ -711,15 +803,20 @@ public final class HiveChat: ObservableObject {
     private func handleIncomingMessage(_ payload: [String: Any]) {
         guard let message = ChatMessage.from(wire: payload, host: configuration.host) else { return }
 
-        /* The server echoes the customer's own messages back. Drop the
-           optimistic copy in favour of the server's, matching on content
-           because the ids differ by construction. */
+        /* Already in the thread under its server id — the ack swapped it in.
+           Checked first so a late echo cannot overwrite a *different*
+           optimistic message that happens to say the same thing. */
+        guard !messages.contains(where: { $0.id == message.id }) else { return }
+
+        /* Current servers acknowledge the customer's own message instead of
+           echoing it (see emitMessage). Should an echo arrive anyway — an
+           older server, or another tab — replace the optimistic copy rather
+           than showing it twice, matching on content because the ids differ. */
         if message.sender == .visitor,
            let index = messages.lastIndex(where: { $0.sender == .visitor && $0.content == message.content && $0.id.hasPrefix("local_") }) {
             messages[index] = message
             return
         }
-        guard !messages.contains(where: { $0.id == message.id }) else { return }
 
         messages.append(message)
         isAgentTyping = false

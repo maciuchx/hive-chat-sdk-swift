@@ -51,7 +51,7 @@ https://github.com/maciuchx/hive-chat-sdk-swift
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.9.0")
+    .package(url: "https://github.com/maciuchx/hive-chat-sdk-swift", from: "0.9.1")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -293,6 +293,17 @@ MP4, which agents can play in the dashboard and which survives a hand-off to
 WhatsApp. The permission prompt appears when the customer taps the mic, not at
 launch.
 
+### Photos and files
+
+Voice notes and photo uploads need a Hive server from the current release
+(November 2026) or later; older servers refused the `audio/mp4` voice format.
+`HiveChatView` re-encodes every picked photo as a JPEG (longest side 2048px,
+under 5MB) — iPhone photos are usually HEIC, which Hive does not accept — and
+its file picker offers images and PDFs only. If you call
+`send(fileData:filename:contentType:)` yourself, do the same: Hive accepts
+JPEG, PNG, GIF, WebP, PDF and `audio/mp4` / m4a / AAC / MPEG, up to
+`HiveChat.maximumUploadBytes` (5MB); anything larger is refused before upload.
+
 ### Keeping the customer inside your app
 
 The bot and your agents can send **product cards** — the same ones the website
@@ -360,8 +371,8 @@ Stated plainly, because finding out later is worse:
   reply only when they next open the app. Until that lands, the practical
   workaround is a Hive webhook into your own backend, which already has push
   credentials for your app.
-- **Identity is unverified** — see above.
-- **No voice or video.** The dashboard has video rooms; the SDK does not.
+- **No voice or video calls.** The dashboard has video rooms; the SDK does
+  not. (Voice *messages* are supported — see above.)
 - **No message editing or deletion.** Neither has a visitor-side protocol.
 
 ## Verifying against a real server
